@@ -6,8 +6,11 @@ from keras.layers.merge import add, concatenate
 from keras.models import Model
 import struct
 import cv2
+import time
+from playsound import playsound
 
-np.set_printoptions(threshold=np.nan)
+#np.set_printoptions(threshold=np.nan)
+np.set_printoptions(threshold=30)
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
@@ -257,7 +260,9 @@ def make_yolov3_model():
     return model
 
 def preprocess_input(image, net_h, net_w):
-    new_h, new_w, _ = image.shape
+    #new_h, new_w, _ = image.shape
+    new_h = 480
+    new_w = 640
 
     # determine the new size of the image
     if (float(net_w)/new_w) < (float(net_h)/new_h):
@@ -356,7 +361,9 @@ def do_nms(boxes, nms_thresh):
                 if bbox_iou(boxes[index_i], boxes[index_j]) >= nms_thresh:
                     boxes[index_j].classes[c] = 0
                     
-def draw_boxes(image, boxes, labels, obj_thresh):
+def draw_boxes_play_music(image, boxes, labels, obj_thresh):
+    highest_conf_label = ''
+    highest_conf = 0
     for box in boxes:
         label_str = ''
         label = -1
@@ -366,6 +373,9 @@ def draw_boxes(image, boxes, labels, obj_thresh):
                 label_str += labels[i]
                 label = i
                 print(labels[i] + ': ' + str(box.classes[i]*100) + '%')
+            if box.classes[i] > highest_conf:
+                highest_conf = box.classes[i]
+                highest_conf_label = labels[i]
                 
         if label >= 0:
             cv2.rectangle(image, (box.xmin,box.ymin), (box.xmax,box.ymax), (0,255,0), 3)
@@ -375,12 +385,23 @@ def draw_boxes(image, boxes, labels, obj_thresh):
                         cv2.FONT_HERSHEY_SIMPLEX, 
                         1e-3 * image.shape[0], 
                         (0,255,0), 2)
-        
+    if highest_conf_label == 'teddy bear':
+        print("Play Bjornen sover!")
+        playsound('Bjornen_sover.wav')
+    if highest_conf_label == 'person':
+        print("Play Huvud axlar kna och ta!")
+        playsound('20201021_003645.wav')
+    if highest_conf_label == 'car':
+        print("Play Jag hamrar och spikar!")
+        playsound('Jag_hamrar_och_spikar.wav')
+    if highest_conf_label == 'cellphone':
+        print("Play Jag hamrar och spikar!")
+        playsound('Jag_hamrar_och_spikar.wav')
     return image      
 
 def _main_(args):
     weights_path = args.weights
-    image_path   = args.image
+    #image_path   = args.image
 
     # set some parameters
     net_h, net_w = 416, 416
@@ -403,7 +424,30 @@ def _main_(args):
     # load the weights trained on COCO into the model
     weight_reader = WeightReader(weights_path)
     weight_reader.load_weights(yolov3)
-
+    
+    # set webcam
+    cap = cv2.VideoCapture(1)
+    while(True):
+        ret, image = cap.read()
+        #image_h, image_w, _ = image.shape
+        image_w = cap.get(3)
+        image_h = cap.get(4)
+        if cv2.waitKey(1) & 0xFF == ord(' '):
+            new_image = preprocess_input(image, net_h, net_w)
+            yolos = yolov3.predict(new_image)
+            boxes = []
+            for i in range(len(yolos)):
+                boxes += decode_netout(yolos[i][0], anchors[i], obj_thresh, nms_thresh, net_h, net_w)
+            correct_yolo_boxes(boxes, image_h, image_w, net_h, net_w)
+            do_nms(boxes, nms_thresh)
+            draw_boxes_play_music(image, boxes, labels, obj_thresh)
+        cv2.imshow('frame',image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+        
+'''
     # preprocess the image
     image = cv2.imread(image_path)
     image_h, image_w, _ = image.shape
@@ -428,7 +472,7 @@ def _main_(args):
  
     # write the image with bounding boxes to file
     cv2.imwrite(image_path[:-4] + '_detected' + image_path[-4:], (image).astype('uint8')) 
-
+'''
 if __name__ == '__main__':
     args = argparser.parse_args()
     _main_(args)
